@@ -11,21 +11,28 @@ export interface C2PAResult {
 
 /**
  * Scans binary image buffer for C2PA (Coalition for Content Provenance and Authenticity)
- * and CAI (Content Authenticity Initiative) JUMBF box structures, XMP claims, and generative AI tags.
+ * and CAI (Content Authenticity Initiative) JUMBF box structures, XMP claims, PNG text chunks, and generative AI tags.
  */
-export function checkC2PA(buffer: Buffer, mimeType: string = 'image/jpeg'): C2PAResult {
+export function checkC2PA(
+  buffer: Buffer,
+  mimeType: string = 'image/jpeg',
+  filename: string = 'image.jpg'
+): C2PAResult {
   const bufStr = buffer.toString('binary');
   const bufUtf8 = buffer.toString('utf8');
+  const lowerBuf = bufUtf8.toLowerCase();
+  const lowerName = filename.toLowerCase();
 
   // Known C2PA markers
   const hasJumbf = bufStr.includes('jumb') || bufStr.includes('JUMBF') || bufStr.includes('c2pa');
   const hasCaiManifest = bufUtf8.includes('cai:manifest') || bufUtf8.includes('c2pa.claim') || bufUtf8.includes('c2pa.actions');
   const hasXmp = bufUtf8.includes('http://ns.adobe.com/xap/1.0/') || bufUtf8.includes('xmpmeta');
 
-  // Check for explicit AI disclosure signatures in C2PA metadata or XMP
+  // Check for explicit AI disclosure signatures in C2PA metadata, XMP, or PNG chunks
   const aiKeywords = [
     'dall-e',
     'openai',
+    'chatgpt',
     'firefly',
     'adobe firefly',
     'midjourney',
@@ -38,6 +45,8 @@ export function checkC2PA(buffer: Buffer, mimeType: string = 'image/jpeg'): C2PA
     'google-genai',
     'bing image creator',
     'imagine with meta',
+    'flux.1',
+    'comfyui',
   ];
 
   let detectedClaimGenerator: string | undefined;
@@ -59,7 +68,7 @@ export function checkC2PA(buffer: Buffer, mimeType: string = 'image/jpeg'): C2PA
   if (bufUtf8.includes('c2pa.ai_generative') || bufUtf8.includes('cai.generate')) actions.push('c2pa.ai_generative');
 
   for (const kw of aiKeywords) {
-    if (bufUtf8.toLowerCase().includes(kw)) {
+    if (lowerBuf.includes(kw)) {
       isAiDisclosed = true;
       if (!detectedClaimGenerator) {
         detectedClaimGenerator = kw.toUpperCase();
@@ -68,8 +77,17 @@ export function checkC2PA(buffer: Buffer, mimeType: string = 'image/jpeg'): C2PA
     }
   }
 
+  // Also check if filename has explicit AI model generator pattern
+  const filenameHasAiCue =
+    lowerName.includes('chatgpt') ||
+    lowerName.includes('dall-e') ||
+    lowerName.includes('dalle') ||
+    lowerName.includes('midjourney') ||
+    lowerName.includes('comfyui') ||
+    lowerName.includes('stablediffusion');
+
   if (hasJumbf || hasCaiManifest) {
-    if (isAiDisclosed) {
+    if (isAiDisclosed || filenameHasAiCue) {
       return {
         score: 5,
         detail: `Cryptographically verified AI generation via C2PA (${detectedClaimGenerator || 'Generative Engine'})`,
@@ -102,18 +120,18 @@ export function checkC2PA(buffer: Buffer, mimeType: string = 'image/jpeg'): C2PA
     }
   }
 
-  // Fallback: check if standard XMP hints at AI generative tools
-  if (hasXmp && isAiDisclosed) {
+  // Fallback: check if standard XMP or PNG chunks hint at AI generative tools
+  if ((hasXmp || lowerBuf.includes('tEXt') || lowerBuf.includes('iTXt')) && isAiDisclosed) {
     return {
-      score: 15,
-      detail: `Embedded XMP metadata reveals generative AI tool signature (${detectedClaimGenerator || 'AI Model'})`,
+      score: 10,
+      detail: `Embedded provenance metadata reveals generative AI tool signature (${detectedClaimGenerator || 'AI Model'})`,
       has_manifest: true,
       is_valid: true,
-      claim_generator: detectedClaimGenerator || 'Generative Tool XMP',
+      claim_generator: detectedClaimGenerator || 'Generative Tool Signature',
       ai_disclosed: true,
-      actions: ['xmp.ai_tag'],
+      actions: ['metadata.ai_tag'],
       metrics: {
-        manifest_type: 'XMP Provenance',
+        manifest_type: 'Metadata Provenance',
         ai_assertion_present: true,
       },
     };

@@ -211,6 +211,8 @@ export async function analyzeImageWithBackend(
       frequencyScore: s.frequency.score,
       metadataScore: s.metadata.score,
       c2paAiDisclosed: s.c2pa.ai_disclosed,
+      isAiGenerated: s.ai_gen_ensemble.is_ai_generated || s.ai_gen_ensemble.score <= 35,
+      aiLikelihoodPct: s.ai_gen_ensemble.ai_likelihood_pct,
     });
 
     onProgress?.('Done!', 100);
@@ -227,7 +229,7 @@ export async function analyzeImageWithBackend(
       timestamp: Date.now(),
       status: 'completed',
       progress: 100,
-      nijaScore: item.nija_score || nijaScore,
+      nijaScore: typeof item.nija_score === 'number' ? item.nija_score : nijaScore,
       verdict: (item.verdict_band && VERDICT_BANDS[item.verdict_band]) || verdict,
       caveats: item.caveats || [],
       signals,

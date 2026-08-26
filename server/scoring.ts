@@ -1,6 +1,6 @@
 export const SIGNAL_WEIGHTS = {
-  c2pa: 30,
-  aiEnsemble: 35,
+  c2pa: 25,
+  aiEnsemble: 40,
   ela: 20,
   frequency: 10,
   metadata: 5,
@@ -44,24 +44,66 @@ export function calculateCompositeNijaScore(signals: {
   frequencyScore: number;
   metadataScore: number;
   c2paAiDisclosed?: boolean;
+  isAiGenerated?: boolean;
+  aiLikelihoodPct?: number;
 }): {
   nijaScore: number;
   verdictInfo: typeof VERDICT_DEFINITIONS[keyof typeof VERDICT_DEFINITIONS];
   caveats: string[];
 } {
-  const { c2paScore, aiEnsembleScore, elaScore, frequencyScore, metadataScore, c2paAiDisclosed } = signals;
+  const {
+    c2paScore,
+    aiEnsembleScore,
+    elaScore,
+    frequencyScore,
+    metadataScore,
+    c2paAiDisclosed,
+    isAiGenerated,
+    aiLikelihoodPct,
+  } = signals;
   const caveats: string[] = [];
 
-  // Direct C2PA AI disclosure hard override
+  // 1. Hard Override: Explicit C2PA / CAI AI disclosure in metadata
   if (c2paAiDisclosed) {
-    caveats.push('Cryptographically verified AI generation assertion present in C2PA manifest box.');
+    caveats.push('Cryptographically verified AI generation assertion present in C2PA Content Credentials manifest.');
     return {
-      nijaScore: Math.min(10, c2paScore),
+      nijaScore: Math.min(10, Math.max(2, c2paScore)),
       verdictInfo: VERDICT_DEFINITIONS.ai_generated,
       caveats,
     };
   }
 
+  // 2. Forensic Gating: AI Ensemble or Multimodal Vision detects AI generation
+  const isDefinitiveAi =
+    isAiGenerated ||
+    aiEnsembleScore <= 35 ||
+    (typeof aiLikelihoodPct === 'number' && aiLikelihoodPct >= 65);
+
+  if (isDefinitiveAi) {
+    const aiScore = Math.min(25, Math.max(2, Math.round(aiEnsembleScore * 0.7)));
+    caveats.push('High-confidence Generative AI synthesis identified by forensic vision analysis and synthetic microtexture modeling.');
+    if (elaScore > 70) {
+      caveats.push('Uniform JPEG error distribution is consistent with pure end-to-end AI generation.');
+    }
+    return {
+      nijaScore: aiScore,
+      verdictInfo: VERDICT_DEFINITIONS.ai_generated,
+      caveats,
+    };
+  }
+
+  // 3. Splicing / Compositing Gating: High ELA anomaly with natural base texture
+  if (elaScore <= 35 && aiEnsembleScore >= 50) {
+    const editScore = Math.min(55, Math.max(30, Math.round(elaScore * 0.9 + 5)));
+    caveats.push('Localized tampering or composite splicing detected: Error Level Analysis shows mismatched compression blocks.');
+    return {
+      nijaScore: editScore,
+      verdictInfo: VERDICT_DEFINITIONS.edited,
+      caveats,
+    };
+  }
+
+  // 4. Standard Calibrated Weighted Scoring
   const cC2pa = Math.max(0, Math.min(100, c2paScore));
   const cAi = Math.max(0, Math.min(100, aiEnsembleScore));
   const cEla = Math.max(0, Math.min(100, elaScore));
@@ -79,11 +121,8 @@ export function calculateCompositeNijaScore(signals: {
   const nijaScore = Math.round(weightedSum);
 
   // Cross-signal checks
-  if (cAi < 35 && cEla > 75) {
-    caveats.push('Uniform JPEG surface but synthetic microtexture detected (consistent with pure AI diffusion).');
-  }
-  if (cEla < 40 && cAi > 70) {
-    caveats.push('Authentic base photo with localized spliced or inpainted elements.');
+  if (cAi < 50 && cEla > 75) {
+    caveats.push('Uniform surface but subtle smoothing detected (consistent with modern portrait enhancement filters).');
   }
 
   let verdictInfo: typeof VERDICT_DEFINITIONS[keyof typeof VERDICT_DEFINITIONS];

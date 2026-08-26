@@ -1,8 +1,8 @@
 import { VerdictBandId, VerdictInfo } from '../types';
 
 export const BACKEND_SIGNAL_WEIGHTS = {
-  c2pa: 30,
-  aiEnsemble: 35,
+  c2pa: 25,
+  aiEnsemble: 40,
   ela: 20,
   frequency: 10,
   metadata: 5,
@@ -72,7 +72,7 @@ export const VERDICT_BANDS: Record<VerdictBandId, VerdictInfo> = {
 };
 
 /**
- * Calculates the composite Nija Score (0 - 100) using the 5 calibrated backend weights
+ * Calculates the composite Nija Score (0 - 100) using calibrated forensic rules
  */
 export function calculate5SignalNijaScore(signals: {
   c2paScore: number;
@@ -81,13 +81,45 @@ export function calculate5SignalNijaScore(signals: {
   frequencyScore: number;
   metadataScore: number;
   c2paAiDisclosed?: boolean;
+  isAiGenerated?: boolean;
+  aiLikelihoodPct?: number;
 }): { nijaScore: number; verdict: VerdictInfo } {
-  const { c2paScore, aiEnsembleScore, elaScore, frequencyScore, metadataScore, c2paAiDisclosed } = signals;
+  const {
+    c2paScore,
+    aiEnsembleScore,
+    elaScore,
+    frequencyScore,
+    metadataScore,
+    c2paAiDisclosed,
+    isAiGenerated,
+    aiLikelihoodPct,
+  } = signals;
 
   if (c2paAiDisclosed) {
     return {
-      nijaScore: Math.min(10, c2paScore),
+      nijaScore: Math.min(10, Math.max(2, c2paScore)),
       verdict: VERDICT_BANDS.ai_generated,
+    };
+  }
+
+  // Forensic Gating for AI generated images
+  const isDefinitiveAi =
+    isAiGenerated ||
+    aiEnsembleScore <= 35 ||
+    (typeof aiLikelihoodPct === 'number' && aiLikelihoodPct >= 65);
+
+  if (isDefinitiveAi) {
+    return {
+      nijaScore: Math.min(25, Math.max(2, Math.round(aiEnsembleScore * 0.7))),
+      verdict: VERDICT_BANDS.ai_generated,
+    };
+  }
+
+  // Forensic Gating for Splicing / Compositing
+  if (elaScore <= 35 && aiEnsembleScore >= 50) {
+    return {
+      nijaScore: Math.min(55, Math.max(30, Math.round(elaScore * 0.9 + 5))),
+      verdict: VERDICT_BANDS.edited,
     };
   }
 

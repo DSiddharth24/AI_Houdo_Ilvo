@@ -79,11 +79,11 @@ async function startServer() {
 
         // Run 5 Calibrated Forensic Signals concurrently in-memory
         const [c2paResult, aiEnsembleResult, elaResult, freqResult, exifResult] = await Promise.all([
-          Promise.resolve(checkC2PA(buffer, mimeType)),
-          predictAIEnsemble(buffer, mimeType),
+          Promise.resolve(checkC2PA(buffer, mimeType, filename)),
+          predictAIEnsemble(buffer, mimeType, filename),
           Promise.resolve(performErrorLevelAnalysis(buffer)),
           Promise.resolve(performFrequencyAnalysis(buffer)),
-          checkExifMetadata(buffer),
+          checkExifMetadata(buffer, filename),
         ]);
 
         const signals = {
@@ -94,7 +94,7 @@ async function startServer() {
           metadata: exifResult,
         };
 
-        // Compute weighted composite score and verdict
+        // Compute weighted composite score and verdict with forensic non-linear gating
         const { nijaScore, verdictInfo, caveats } = calculateCompositeNijaScore({
           c2paScore: c2paResult.score,
           aiEnsembleScore: aiEnsembleResult.score,
@@ -102,7 +102,18 @@ async function startServer() {
           frequencyScore: freqResult.score,
           metadataScore: exifResult.score,
           c2paAiDisclosed: c2paResult.ai_disclosed,
+          isAiGenerated: aiEnsembleResult.is_ai_generated,
+          aiLikelihoodPct: aiEnsembleResult.ai_likelihood_pct,
         });
+
+        // Add visual artifact caveats if available
+        if (aiEnsembleResult.forensic_reasons && aiEnsembleResult.forensic_reasons.length > 0) {
+          for (const reason of aiEnsembleResult.forensic_reasons) {
+            if (!caveats.includes(reason)) {
+              caveats.push(reason);
+            }
+          }
+        }
 
         results.push({
           filename,

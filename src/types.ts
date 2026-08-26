@@ -163,6 +163,9 @@ export interface BackendAnalyzeResponse {
         per_model?: Record<string, number>;
         models_evaluated?: string[];
         metrics?: Record<string, any>;
+        is_ai_generated?: boolean;
+        ai_likelihood_pct?: number;
+        forensic_reasons?: string[];
       };
       ela: {
         score: number;

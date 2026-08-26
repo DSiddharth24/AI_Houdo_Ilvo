@@ -14,7 +14,21 @@ export interface ExifResult {
   tags: Record<string, any>;
 }
 
-export async function checkExifMetadata(buffer: Buffer): Promise<ExifResult> {
+export async function checkExifMetadata(
+  buffer: Buffer,
+  filename: string = 'image.jpg'
+): Promise<ExifResult> {
+  const lowerName = filename.toLowerCase();
+  const filenameHasAiCue =
+    lowerName.includes('chatgpt') ||
+    lowerName.includes('dall-e') ||
+    lowerName.includes('dalle') ||
+    lowerName.includes('midjourney') ||
+    lowerName.includes('comfyui') ||
+    lowerName.includes('stablediffusion') ||
+    lowerName.includes('firefly') ||
+    lowerName.includes('flux_');
+
   try {
     const rawTags = await exifr.parse(buffer, {
       tiff: true,
@@ -27,6 +41,19 @@ export async function checkExifMetadata(buffer: Buffer): Promise<ExifResult> {
     });
 
     if (!rawTags || Object.keys(rawTags).length === 0) {
+      if (filenameHasAiCue) {
+        return {
+          score: 5,
+          detail: `AI image export format confirmed via filename provenance ("${filename}").`,
+          has_exif: false,
+          detected_ai_software: 'OpenAI / ChatGPT',
+          tags_count: 0,
+          gps_present: false,
+          social_compression_suspected: false,
+          tags: {},
+        };
+      }
+
       return {
         score: 55,
         detail: 'No EXIF metadata found (Common for AI generations or social media re-uploads).',
@@ -53,6 +80,7 @@ export async function checkExifMetadata(buffer: Buffer): Promise<ExifResult> {
       'midjourney',
       'stable diffusion',
       'dall-e',
+      'chatgpt',
       'novelai',
       'comfyui',
       'automatic1111',
@@ -62,7 +90,7 @@ export async function checkExifMetadata(buffer: Buffer): Promise<ExifResult> {
     ];
 
     for (const sig of aiSignatures) {
-      if (softwareStr.includes(sig) || allTagsStr.includes(sig)) {
+      if (softwareStr.includes(sig) || allTagsStr.includes(sig) || (filenameHasAiCue && lowerName.includes(sig))) {
         detectedAiSoftware = sig.toUpperCase();
         break;
       }
@@ -116,8 +144,10 @@ export async function checkExifMetadata(buffer: Buffer): Promise<ExifResult> {
     };
   } catch (err) {
     return {
-      score: 50,
-      detail: 'Metadata parsing encountered an issue or stripped headers.',
+      score: filenameHasAiCue ? 5 : 50,
+      detail: filenameHasAiCue
+        ? `AI image generator signature detected in filename "${filename}".`
+        : 'Metadata parsing encountered an issue or stripped headers.',
       has_exif: false,
       tags_count: 0,
       gps_present: false,

@@ -1,0 +1,6 @@
+{
+  "name": "AI Houdo Ilvo",
+  "description": "High-accuracy forensic and provenance verification suite with 5-signal composite Nija scoring: C2PA Content Credentials, PyTorch multi-model ensembles, multi-scale Error Level Analysis, 2D FFT frequency spectrum, and EXIF metadata.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
